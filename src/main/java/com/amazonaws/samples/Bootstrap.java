@@ -1,14 +1,13 @@
 package com.amazonaws.samples;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.sqs.AmazonSQS;
-import com.amazonaws.services.sqs.AmazonSQSClientBuilder;
-import com.amazonaws.services.sqs.AmazonSQSResponder;
-import com.amazonaws.services.sqs.AmazonSQSResponderClientBuilder;
-import com.amazonaws.services.sqs.model.AmazonSQSException;
-import com.amazonaws.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.dynamodbv2.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodbv2.DynamoDbClientBuilder;
+import software.amazon.awssdk.services.dynamodbv2.model.AttributeValue;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.SqsClientBuilder;
+import software.amazon.awssdk.services.sqs.SqsResponderClient;
+import software.amazon.awssdk.services.sqs.model.SqsException;
+import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import com.amazonaws.services.sqs.util.SQSMessageConsumer;
 import com.amazonaws.services.sqs.util.SQSMessageConsumerBuilder;
 import com.jayway.jsonpath.JsonPath;
@@ -36,17 +35,17 @@ public class Bootstrap {
         try {
             //insert the queue name and container id in a DynamoDB table
             String taskId = getTaskId();
-            AmazonSQS sqs = AmazonSQSClientBuilder.defaultClient();
-            CreateQueueRequest create_request = new CreateQueueRequest(taskId);
+            SqsClient sqs = SqsClientBuilder.defaultClient();
+            CreateQueueRequest create_request = CreateQueueRequest.builder().build();
             sqs.createQueue(create_request);
 
             queue_url = sqs.getQueueUrl(taskId).getQueueUrl();
-            AmazonDynamoDB ddbClient = AmazonDynamoDBClientBuilder.defaultClient();
+            DynamoDbClient ddbClient = DynamoDbClientBuilder.defaultClient();
 
             Map<String, AttributeValue> item_values = new HashMap<String,AttributeValue>();
 
-            item_values.put("id", new AttributeValue(taskId));
-            item_values.put("QueueName", new AttributeValue(taskId));
+            item_values.put("id", AttributeValue.builder().build());
+            item_values.put("QueueName", AttributeValue.builder().build());
             //item_values.put("id", new AttributeValue(UUID.randomUUID().toString()));
 
             //ddbClient.putItem(SQS_CONTAINER_MAPPING_TABLE,item_values);
@@ -56,9 +55,9 @@ public class Bootstrap {
 
         }catch(IOException exp){
             exp.printStackTrace();
-        }catch (AmazonSQSException e) {
+        }catch (SqsException e) {
             e.printStackTrace();
-            if (!e.getErrorCode().equals("QueueAlreadyExists")) {
+            if (!e.awsErrorDetails().errorCode().equals("QueueAlreadyExists")) {
                 throw e;
             }
         }
@@ -104,17 +103,17 @@ public class Bootstrap {
         //String queueUrl = "https://sqs.us-west-2.amazonaws.com/681921237057/sns-subsciption-test";
         System.out.println("Starting up consumer using queue: " + queue_url);
 
-        AmazonSQS sqs = AmazonSQSClientBuilder.defaultClient();
-        AmazonSQSResponder responder = AmazonSQSResponderClientBuilder.standard()
-                .withAmazonSQS(sqs)
+        SqsClient sqs = SqsClientBuilder.defaultClient();
+        SqsResponderClient responder = SqsResponderClient.builder()
+                .amazonSqs(sqs)
                 .build();
 
         SQSMessageConsumer consumer = SQSMessageConsumerBuilder.standard()
                 .withAmazonSQS(responder.getAmazonSQS())
                 .withQueueUrl(queue_url)
                 .withConsumer(message -> {
-                    System.out.println("The message is " + message.getBody());
-                    sqs.deleteMessage(queue_url,message.getReceiptHandle());
+                    System.out.println("The message is " + message.body());
+                    sqs.deleteMessage(queue_url,message.receiptHandle());
 
                 }).build();
         consumer.start();
